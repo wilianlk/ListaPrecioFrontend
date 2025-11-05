@@ -8,7 +8,9 @@ const Card = ({ className = "", children, ...rest }) => (
         {children}
     </div>
 );
-const CardContent = ({ className = "", children }) => <div className={`p-4 ${className}`}>{children}</div>;
+const CardContent = ({ className = "", children }) => (
+    <div className={`p-4 ${className}`}>{children}</div>
+);
 const UnderInput = ({ label, type = "text", value, onChange, placeholder, autoFocus }) => (
     <label className="flex flex-col">
         {label && <span className="text-sm font-medium text-gray-700 mb-1">{label}</span>}
@@ -28,8 +30,7 @@ const SelectPlain = ({ label, value, onChange, children }) => (
         <select
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="px-0 py-2 bg-transparent border-0 border-b border-gray-300 focus:outline-none focus:ring-0 focus:border-[#0D2A45]"
-        >
+            className="px-0 py-2 bg-transparent border-0 border-b border-gray-300 focus:outline-none focus:ring-0 focus:border-[#0D2A45]">
             {children}
         </select>
     </label>
@@ -61,30 +62,33 @@ const estadoBadgeClass = (estado) => {
     if (st === "APROBADO") return "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
     if (st === "PENDIENTE") return "bg-amber-100 text-amber-800 ring-1 ring-amber-200";
     if (st === "RECHAZADO") return "bg-rose-100 text-rose-800 ring-1 ring-rose-200";
+    if (st === "VALIDADO") return "bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200";
+    if (st === "EN VALIDACCION") return "bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200";
     return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
 };
 
 /* ==== estilos unificados para botones ==== */
 const BTN =
-    "inline-flex items-center justify-center h-10 px-4 rounded-lg text-sm font-medium leading-none " +
-    "transition focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed";
-
-/* Botón compacto para tabla y modal */
+    "inline-flex items-center justify-center h-10 px-4 rounded-lg text-sm font-medium leading-none transition focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed";
 const BTN_TABLE =
-    "inline-flex items-center justify-center h-8 px-3 rounded-md text-xs font-medium leading-none " +
-    "transition focus:outline-none focus:ring-1 focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center h-8 px-3 rounded-md text-xs font-medium leading-none transition focus:outline-none focus:ring-1 focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed";
+
+/* Variantes sobrias */
+const BTN_ACCENT = `${BTN} bg-[#0D2A45] text-white hover:bg-[#0D2A45]/90 focus:ring-[#0D2A45]/40`;
+const BTN_OUTLINE = `${BTN} border border-slate-300 text-slate-700 hover:bg-slate-100 focus:ring-slate-300`;
+const BTN_TABLE_ACCENT = `${BTN_TABLE} bg-[#0D2A45] text-white hover:bg-[#0D2A45]/90 focus:ring-[#0D2A45]/30`;
+const BTN_TABLE_OUTLINE = `${BTN_TABLE} border border-slate-300 text-slate-700 hover:bg-slate-100 focus:ring-slate-300`;
 
 export default function ListarCambios() {
     const { apiBaseURL } = getConfig();
     const LIST_URL = `${apiBaseURL}/api/ListasPrecios/listar-cambios`;
     const OPERAR_URL = `${apiBaseURL}/api/ListasPrecios/operar`;
-    const VALIDAR_URL = `${apiBaseURL}/api/ListasPrecios/validar`; // <- NUEVO
+    const VALIDAR_URL = `${apiBaseURL}/api/ListasPrecios/validar`; // Validar dedicado
+    const FINALIZAR_URL = `${apiBaseURL}/api/ListasPrecios/finalizar`; // <-- NUEVO endpoint dedicado
 
     /* Roles */
     const userRoles = JSON.parse(localStorage.getItem("userRoles") || "[]");
-    const rolesNorm = Array.isArray(userRoles)
-        ? userRoles.map((r) => String(r || "").trim().toUpperCase())
-        : [];
+    const rolesNorm = Array.isArray(userRoles) ? userRoles.map((r) => String(r || "").trim().toUpperCase()) : [];
     const canPublicar = rolesNorm.includes("APROBADOR_GERENTE");
     const canValidar = rolesNorm.includes("VALIDACION");
 
@@ -143,8 +147,7 @@ export default function ListarCambios() {
             const arr = Array.isArray(j) ? j : j?.datos || j?.data || [];
 
             setDatos(arr);
-            if (!Array.isArray(j) && j?.ok === false)
-                pushToast("El servicio devolvió un error.", "warning");
+            if (!Array.isArray(j) && j?.ok === false) pushToast("El servicio devolvió un error.", "warning");
         } catch (e) {
             setError(e?.message || "Error al consultar operaciones.");
             pushToast(`❌ ${e?.message || "Error al consultar operaciones."}`, "error");
@@ -158,14 +161,25 @@ export default function ListarCambios() {
         cargar(); // eslint-disable-line
     }, [LIST_URL]);
 
+    /* === Resumen con todos los estados relevantes === */
     const resumen = useMemo(() => {
-        const total = datos.length;
-        const pend = datos.filter((r) => String(r.estado || "").toUpperCase() === "PENDIENTE").length;
-        const aprob = datos.filter((r) => String(r.estado || "").toUpperCase() === "APROBADO").length;
-        return { total, pend, aprob };
+        const acc = { total: 0 };
+        for (const r of datos) {
+            const st = String(r.estado || "").toUpperCase();
+            acc.total += 1;
+            acc[st] = (acc[st] || 0) + 1;
+        }
+        return {
+            total: acc.total,
+            pend: acc["PENDIENTE"] || 0,
+            enval: acc["EN VALIDACCION"] || 0,
+            val: acc["VALIDADO"] || 0,
+            aprob: acc["APROBADO"] || 0,
+            rech: acc["RECHAZADO"] || 0,
+        };
     }, [datos]);
 
-    // filtro listado (por operación)
+    // filtro listado
     const filtrados = useMemo(() => {
         const norm = (v) => (v ?? "").toString().trim().toLowerCase();
         const q = norm(qGlobal);
@@ -188,7 +202,7 @@ export default function ListarCambios() {
         return filtrados.slice(start, start + pageSize);
     }, [filtrados, page, pageSize]);
 
-    // modal detalle de operación
+    // modal
     const [showModal, setShowModal] = useState(false);
     const [sel, setSel] = useState(null);
     const openModal = (op) => {
@@ -200,7 +214,7 @@ export default function ListarCambios() {
         setSel(null);
     };
 
-    // Navegar a "Actualización de Precios"
+    // Navegar
     const goToActualizacion = () => {
         try {
             window.dispatchEvent(new CustomEvent("lp:goto", { detail: "actualizacion" }));
@@ -221,13 +235,15 @@ export default function ListarCambios() {
         } catch {}
     };
 
-    // publicar/aprobar (Aprobador_Gerente)
+    // publicar/aprobar
     const [aprobandoOpId, setAprobandoOpId] = useState(null);
     const aprobarOperacion = async (operacion) => {
         if (!operacion) return;
         const st = String(operacion.estado || "").toUpperCase();
-        if (st !== "EN VALIDACCION") {
-            pushToast("Solo se pueden validar operaciones en estado EN VALIDACCION.", "warning");
+
+        // FIX: coherente con el botón (solo visible en PENDIENTE)
+        if (st !== "PENDIENTE") {
+            pushToast("Solo se puede publicar una operación en estado PENDIENTE.", "warning");
             return;
         }
         if (!canPublicar) {
@@ -290,7 +306,7 @@ export default function ListarCambios() {
         }
     };
 
-    // validar (Validacion)
+    // validar
     const [validandoOpId, setValidandoOpId] = useState(null);
     const validarOperacion = async (operacion) => {
         if (!operacion) return;
@@ -299,7 +315,7 @@ export default function ListarCambios() {
             pushToast("Solo se pueden validar operaciones en estado EN VALIDACCION.", "warning");
             return;
         }
-        if (!canValidar) {
+        if (!(canValidar || rolesNorm.includes("ADMIN"))) {
             pushToast("No tienes permisos para validar esta operación.", "warning");
             return;
         }
@@ -359,7 +375,85 @@ export default function ListarCambios() {
         }
     };
 
-    // tarjeta móvil
+    // finalizar — ahora usa endpoint dedicado FINALIZAR_URL
+    const [finalizandoOpId, setFinalizandoOpId] = useState(null);
+    const finalizarOperacion = async (operacion) => {
+        if (!operacion) return;
+        const st = String(operacion.estado || "").toUpperCase();
+        if (st !== "VALIDADO") {
+            pushToast("Solo se puede finalizar una operación en estado VALIDADO.", "warning");
+            return;
+        }
+        if (!(rolesNorm.includes("ADMIN") || canPublicar)) {
+            pushToast("No tienes permisos para finalizar esta operación.", "warning");
+            return;
+        }
+        if (!window.confirm(`¿Finalizar la operación #${operacion.operacionId}?`)) return;
+
+        // 🔹 Obtener identificación ANTES de crear el payload
+        let identificacion = localStorage.getItem("identificacion");
+        if (!identificacion) {
+            identificacion = prompt("Ingresa tu identificación:");
+            if (identificacion) localStorage.setItem("identificacion", identificacion);
+        }
+
+        const detalles = Array.isArray(operacion.detalles) ? operacion.detalles : [];
+        const toNum = (x) => Number(x ?? 0);
+
+        const payload = {
+            Accion: "FINALIZAR",
+            Usuario: identificacion,
+            Identificacion: identificacion,
+            Gerente: operacion.gerente ?? null,
+            Iva: toNum(operacion.iva),
+            Observacion: operacion.observacion ?? null,
+            OperacionId: operacion.operacionId,
+            Cambios: detalles.map((d) => ({
+                Codigo: d.prId || d.pr_id || d.codigo || d.Codigo,
+                PrecioActual: toNum(d.precioActual ?? d.precio_actual),
+                IncrementoPct: toNum(d.incrementoPct ?? d.incremento_pct),
+                NuevoPrecioLista: toNum(d.nuevoPrecio ?? d.nuevo_precio ?? d.nuevo_precio_lista),
+                Niveles: [
+                    d.niveles?.n1 ?? d.n1,
+                    d.niveles?.n2 ?? d.n2,
+                    d.niveles?.n3 ?? d.n3,
+                    d.niveles?.n4 ?? d.n4,
+                    d.niveles?.n5 ?? d.n5,
+                    d.niveles?.n6 ?? d.n6,
+                    d.niveles?.n7 ?? d.n7,
+                    d.niveles?.n8 ?? d.n8,
+                    d.niveles?.n9 ?? d.n9,
+                ].map(toNum),
+            })),
+        };
+
+        try {
+            setFinalizandoOpId(operacion.operacionId);
+            const res = await fetch(FINALIZAR_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const txt = await res.text();
+            let j;
+            try {
+                j = JSON.parse(txt);
+            } catch {
+                j = { ok: res.ok, raw: txt };
+            }
+            if (!res.ok || j?.ok === false) throw new Error(j?.error || j?.mensaje || "No se pudo finalizar la operación.");
+
+            pushToast(`✅ Operación #${operacion.operacionId} finalizada correctamente.`, "success");
+            closeModal();
+            await cargar();
+        } catch (e) {
+            pushToast(`❌ Error al finalizar: ${e?.message || "desconocido"}`, "error");
+        } finally {
+            setFinalizandoOpId(null);
+        }
+    };
+
+    /* Tarjeta móvil */
     const TarjetaOperacion = ({ op }) => {
         const badge = estadoBadgeClass(op.estado);
         const st = String(op.estado || "").toUpperCase();
@@ -368,10 +462,12 @@ export default function ListarCambios() {
                 <CardContent className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                         <div>
-                            <div className="text-xs text-gray-500">Operación</div>
+                            <div className="text-xs text-gray-500">Lista</div>
                             <div className="text-base font-semibold text-gray-900">#{op.operacionId}</div>
                         </div>
-                        <span className={`px-2 py-1 rounded-md text-xs font-medium ${badge}`}>{String(op.estado || "-").toUpperCase()}</span>
+                        <span className={`px-2 py-1 rounded-md text-xs font-medium ${badge}`}>
+                            {String(op.estado || "-").toUpperCase()}
+                        </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -400,24 +496,22 @@ export default function ListarCambios() {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                        {!canValidar && (
+                        {st === "PENDIENTE" && (
                             <button
                                 onClick={() => {
                                     localStorage.setItem("LP_LAST_OP_ID", String(op.operacionId));
                                     goToActualizacion();
                                 }}
-                                className={`${BTN} border border-[#0D2A45] text-[#0D2A45] hover:bg-[#0D2A45]/10 focus:ring-[#0D2A45]/40`}
-                            >
+                                className={BTN_OUTLINE}>
                                 Continuar en actualización
                             </button>
                         )}
 
-                        {st === "EN VALIDACCION" && canValidar && (
+                        {st === "EN VALIDACCION" && (canValidar || rolesNorm.includes("ADMIN")) && (
                             <button
                                 onClick={() => validarOperacion(op)}
                                 disabled={validandoOpId === op.operacionId}
-                                className={`${BTN} bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-300`}
-                            >
+                                className={BTN_ACCENT}>
                                 {validandoOpId === op.operacionId ? "Validando…" : "Validar"}
                             </button>
                         )}
@@ -426,16 +520,21 @@ export default function ListarCambios() {
                             <button
                                 onClick={() => aprobarOperacion(op)}
                                 disabled={aprobandoOpId === op.operacionId}
-                                className={`${BTN} bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-300`}
-                            >
+                                className={BTN_ACCENT}>
                                 {aprobandoOpId === op.operacionId ? "Publicando…" : "Publicar"}
                             </button>
                         )}
 
-                        <button
-                            onClick={() => openModal(op)}
-                            className={`${BTN} bg-gradient-to-r from-[#0D2A45] to-[#103654] text-white hover:opacity-90 focus:ring-[#0D2A45]/40`}
-                        >
+                        {st === "VALIDADO" && (rolesNorm.includes("ADMIN") || canPublicar) && (
+                            <button
+                                onClick={() => finalizarOperacion(op)}
+                                disabled={finalizandoOpId === op.operacionId}
+                                className={BTN_ACCENT}>
+                                {finalizandoOpId === op.operacionId ? "Finalizando…" : "Finalizar"}
+                            </button>
+                        )}
+
+                        <button onClick={() => openModal(op)} className={BTN_OUTLINE}>
                             Ver detalles
                         </button>
                     </div>
@@ -448,8 +547,7 @@ export default function ListarCambios() {
         <section
             ref={sectionRef}
             className="p-2 md:p-4 space-y-4 overflow-x-hidden [padding-bottom:env(safe-area-inset-bottom)]"
-            style={{ minHeight: "100vh", paddingBottom: `${bottomPad}px`, overflowY: "auto", scrollBehavior: "smooth" }}
-        >
+            style={{ minHeight: "100vh", paddingBottom: `${bottomPad}px`, overflowY: "auto", scrollBehavior: "smooth" }}>
             <div className="bg-white rounded-2xl border border-gray-200 shadow p-4">
                 <div className="flex flex-col md:flex-row gap-4 justify-between items-stretch md:items-end">
                     <div className="flex gap-4 items-end flex-1">
@@ -465,18 +563,22 @@ export default function ListarCambios() {
                                 autoFocus
                             />
                         </div>
+
                         <SelectPlain
                             label="Estado"
                             value={estado}
                             onChange={(v) => {
                                 setEstado(v);
                                 setPage(1);
-                            }}
-                        >
+                            }}>
                             <option value="TODOS">Todos</option>
                             <option value="PENDIENTE">Pendiente</option>
                             <option value="APROBADO">Aprobado</option>
+                            <option value="VALIDADO">Validado</option>
+                            <option value="EN VALIDACCION">En validación</option>
+                            <option value="RECHAZADO">Rechazado</option>
                         </SelectPlain>
+
                         <SelectPlain label="Filas" value={pageSize} onChange={applyPageSize}>
                             {PAGE_SIZE_OPTIONS.map((n) => (
                                 <option key={n} value={n}>
@@ -488,43 +590,45 @@ export default function ListarCambios() {
 
                     <div className="flex gap-2 justify-end">
                         <button
-                            className={`${BTN} border border-slate-300 text-slate-700 hover:bg-slate-100 focus:ring-slate-300`}
+                            className={BTN_OUTLINE}
                             onClick={() => {
                                 setQGlobal("");
                                 setEstado("TODOS");
                                 setF({ operacion: "", gerente: "" });
                                 setPage(1);
-                            }}
-                        >
+                            }}>
                             Limpiar filtros
                         </button>
-                        <button
-                            className={`${BTN} border border-slate-300 text-slate-700 hover:bg-slate-100 focus:ring-slate-300`}
-                            onClick={cargar}
-                            disabled={cargando}
-                        >
-                            {cargando ? "Actualizando…" : "Refrescar"}
-                        </button>
+                        {/* Botón Refrescar removido a solicitud */}
                     </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-3 text-sm">
-          <span className="px-2 py-1 rounded-md bg-slate-100 text-slate-700 ring-1 ring-slate-200">
-            Total: <b>{resumen.total}</b>
-          </span>
+                    <span className="px-2 py-1 rounded-md bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+                        Total: <b>{resumen.total}</b>
+                    </span>
                     <span className="px-2 py-1 rounded-md bg-amber-100 text-amber-800 ring-1 ring-amber-200">
-            Pendientes: <b>{resumen.pend}</b>
-          </span>
+                        Pendientes: <b>{resumen.pend}</b>
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200">
+                        En validación: <b>{resumen.enval}</b>
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200">
+                        Validados: <b>{resumen.val}</b>
+                    </span>
                     <span className="px-2 py-1 rounded-md bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200">
-            Aprobados: <b>{resumen.aprob}</b>
-          </span>
+                        Aprobados: <b>{resumen.aprob}</b>
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-rose-100 text-rose-800 ring-1 ring-rose-200">
+                        Rechazados: <b>{resumen.rech}</b>
+                    </span>
                 </div>
             </div>
 
             {cargando && <div className="text-sm text-gray-600">Cargando operaciones…</div>}
             {error && <div className="text-sm text-rose-700">❌ {error}</div>}
 
-            {/* Móvil: tarjetas de operación */}
+            {/* Móvil */}
             {!cargando && !error && (
                 <div className="md:hidden space-y-3">
                     {rows.length === 0 ? (
@@ -535,20 +639,20 @@ export default function ListarCambios() {
                 </div>
             )}
 
-            {/* Escritorio: tabla de operaciones */}
+            {/* Escritorio */}
             {!cargando && !error && (
                 <div className="hidden md:block overflow-x-auto bg-white rounded-2xl border border-gray-200 shadow">
                     <table className="min-w-full text-sm border-separate border-spacing-0 rounded-2xl shadow overflow-hidden">
                         <thead>
                         <tr className="bg-gradient-to-r from-[#0D2A45] to-[#103654] text-white">
-                            <th className="py-3 px-4 text-center font-semibold rounded-tl-2xl">OPERACIÓN</th>
+                            <th className="py-3 px-4 text-center font-semibold rounded-tl-2xl">LISTA</th>
                             <th className="py-3 px-4 text-left font-semibold">FECHA</th>
                             <th className="py-3 px-4 text-left font-semibold">ACCIÓN</th>
                             <th className="py-3 px-4 text-center font-semibold">ESTADO</th>
                             <th className="py-3 px-4 text-center font-semibold">GERENTE</th>
                             <th className="py-3 px-4 text-center font-semibold">% IVA</th>
                             <th className="py-3 px-4 text-center font-semibold">PRODUCTOS</th>
-                            <th className="py-3 px-4 text-center font-semibold rounded-tr-2xl">ACCIÓN</th>
+                            <th className="py-3 px-4 text-left font-semibold rounded-tr-2xl">ACCIÓN</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -564,45 +668,38 @@ export default function ListarCambios() {
                                 return (
                                     <tr
                                         key={`op-${r.operacionId}-${i}`}
-                                        className={`${i % 2 ? "bg-white" : "bg-gray-50"} hover:bg-[#0D2A45]/5`}
-                                    >
+                                        className={`${i % 2 ? "bg-white" : "bg-gray-50"} hover:bg-[#0D2A45]/5`}>
                                         <td className="py-3 px-4 text-center font-semibold text-slate-800">#{r.operacionId}</td>
                                         <td className="py-3 px-4">{r.fecha || "-"}</td>
                                         <td className="py-3 px-4">{r.accion || "-"}</td>
                                         <td className="py-3 px-4 text-center">
-                        <span
-                            className={`px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm ${estadoBadgeClass(
-                                st
-                            )}`}
-                        >
-                          {st || "-"}
-                        </span>
+                                                <span className={`px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm ${estadoBadgeClass(st)}`}>
+                                                    {st || "-"}
+                                                </span>
                                         </td>
                                         <td className="py-3 px-4 text-center">{r.gerente || "-"}</td>
                                         <td className="py-3 px-4 text-center">{Number(r.iva ?? 0).toFixed(0)}%</td>
                                         <td className="py-3 px-4 text-center">
                                             {r?.totales?.productos ?? r?.productos ?? r?.detalles?.length ?? 0}
                                         </td>
-                                        <td className="py-3 px-4 text-center">
-                                            <div className="flex flex-wrap items-center justify-center gap-2">
-                                                {!canValidar && (
+                                        <td className="py-3 px-4">
+                                            <div className="flex flex-col items-start gap-2">
+                                                {st === "PENDIENTE" && (
                                                     <button
                                                         onClick={() => {
                                                             localStorage.setItem("LP_LAST_OP_ID", String(r.operacionId));
                                                             goToActualizacion();
                                                         }}
-                                                        className={`${BTN} border border-[#0D2A45] text-[#0D2A45] hover:bg-[#0D2A45]/10 focus:ring-[#0D2A45]/40`}
-                                                    >
+                                                        className={BTN_TABLE_OUTLINE}>
                                                         Continuar en actualización
                                                     </button>
                                                 )}
 
-                                                {st === "EN VALIDACCION" && canValidar && (
+                                                {st === "EN VALIDACCION" && (canValidar || rolesNorm.includes("ADMIN")) && (
                                                     <button
                                                         onClick={() => validarOperacion(r)}
                                                         disabled={validandoOpId === r.operacionId}
-                                                        className={`${BTN_TABLE} bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-300`}
-                                                    >
+                                                        className={BTN_TABLE_ACCENT}>
                                                         {validandoOpId === r.operacionId ? "Validando…" : "Validar"}
                                                     </button>
                                                 )}
@@ -611,16 +708,21 @@ export default function ListarCambios() {
                                                     <button
                                                         onClick={() => aprobarOperacion(r)}
                                                         disabled={aprobandoOpId === r.operacionId}
-                                                        className={`${BTN_TABLE} bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-300`}
-                                                    >
+                                                        className={BTN_TABLE_ACCENT}>
                                                         {aprobandoOpId === r.operacionId ? "Publicando…" : "Publicar"}
                                                     </button>
                                                 )}
 
-                                                <button
-                                                    onClick={() => openModal(r)}
-                                                    className={`${BTN_TABLE} bg-gradient-to-r from-[#0D2A45] to-[#103654] text-white hover:opacity-90 focus:ring-[#0D2A45]/40`}
-                                                >
+                                                {st === "VALIDADO" && (rolesNorm.includes("ADMIN") || canPublicar) && (
+                                                    <button
+                                                        onClick={() => finalizarOperacion(r)}
+                                                        disabled={finalizandoOpId === r.operacionId}
+                                                        className={BTN_TABLE_ACCENT}>
+                                                        {finalizandoOpId === r.operacionId ? "Finalizando…" : "Finalizar"}
+                                                    </button>
+                                                )}
+
+                                                <button onClick={() => openModal(r)} className={BTN_TABLE_OUTLINE}>
                                                     Ver detalles
                                                 </button>
                                             </div>
@@ -633,24 +735,22 @@ export default function ListarCambios() {
                     </table>
 
                     <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t rounded-b-2xl">
-            <span className="text-sm text-gray-600">
-              {pageSize === 0
-                  ? `Mostrando todos — ${filtrados.length} registros`
-                  : `Página ${page} de ${totalPages} — ${filtrados.length} registros`}
-            </span>
+                        <span className="text-sm text-gray-600">
+                            {pageSize === 0
+                                ? `Mostrando todos — ${filtrados.length} registros`
+                                : `Página ${page} de ${totalPages} — ${filtrados.length} registros`}
+                        </span>
                         <div className="flex gap-2">
                             <button
                                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                className={`${BTN_TABLE} border border-slate-300 text-slate-700 hover:bg-slate-100 focus:ring-slate-300`}
-                                disabled={pageSize === 0 || page <= 1}
-                            >
+                                className={BTN_TABLE_OUTLINE}
+                                disabled={pageSize === 0 || page <= 1}>
                                 Anterior
                             </button>
                             <button
                                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                className={`${BTN_TABLE} border border-slate-300 text-slate-700 hover:bg-slate-100 focus:ring-slate-300`}
-                                disabled={pageSize === 0 || page >= totalPages}
-                            >
+                                className={BTN_TABLE_OUTLINE}
+                                disabled={pageSize === 0 || page >= totalPages}>
                                 Siguiente
                             </button>
                         </div>
@@ -658,14 +758,14 @@ export default function ListarCambios() {
                 </div>
             )}
 
-            {/* Modal de operación */}
+            {/* Modal */}
             {showModal && sel && (
                 <div className="fixed inset-0 z-[9998] flex items-start md:items-center justify-center p-3 md:p-6">
                     <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
                     <div className="relative w-full max-w-[1100px] bg-white rounded-2xl shadow-2xl overflow-hidden z-[9999]">
                         <div className="bg-gradient-to-r from-[#0D2A45] to-[#103654] text-white px-5 py-4 flex items-center justify-between">
                             <h3 className="text-lg md:text-xl font-bold">
-                                Operación #{sel.operacionId} — {sel.accion || "-"}
+                                Lista #{sel.operacionId}
                             </h3>
                             <button onClick={closeModal} className="text-white/90 hover:text-white text-xl leading-none" aria-label="Cerrar">
                                 ✕
@@ -676,11 +776,7 @@ export default function ListarCambios() {
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div>
                                     <div className="text-xs text-gray-500">Estado</div>
-                                    <div
-                                        className={`inline-block mt-1 px-3 py-1.5 rounded-full text-xs font-semibold ${estadoBadgeClass(
-                                            sel.estado
-                                        )}`}
-                                    >
+                                    <div className={`inline-block mt-1 px-3 py-1.5 rounded-full text-xs font-semibold ${estadoBadgeClass(sel.estado)}`}>
                                         {String(sel.estado || "-").toUpperCase()}
                                     </div>
                                 </div>
@@ -699,37 +795,45 @@ export default function ListarCambios() {
                             </div>
 
                             <div className="flex flex-wrap justify-end gap-2">
-                                {!canValidar && (
+                                {String(sel.estado || "").toUpperCase() === "PENDIENTE" && (
                                     <button
                                         onClick={() => {
                                             localStorage.setItem("LP_LAST_OP_ID", String(sel.operacionId));
                                             goToActualizacion();
                                         }}
-                                        className={`${BTN_TABLE} border border-[#0D2A45] text-[#0D2A45] hover:bg-[#0D2A45]/10 focus:ring-[#0D2A45]/40`}
-                                    >
+                                        className={BTN_TABLE_OUTLINE}>
                                         Continuar en actualización
                                     </button>
                                 )}
 
-                                {String(sel.estado || "").toUpperCase() === "PENDIENTE" && canValidar && (
-                                    <button
-                                        onClick={() => validarOperacion(sel)}
-                                        disabled={validandoOpId === sel.operacionId}
-                                        className={`${BTN_TABLE} bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-300`}
-                                    >
-                                        {validandoOpId === sel.operacionId ? "Validando…" : "Validar"}
-                                    </button>
-                                )}
+                                {String(sel.estado || "").toUpperCase() === "EN VALIDACCION" &&
+                                    (canValidar || rolesNorm.includes("ADMIN")) && (
+                                        <button
+                                            onClick={() => validarOperacion(sel)}
+                                            disabled={validandoOpId === sel.operacionId}
+                                            className={BTN_TABLE_ACCENT}>
+                                            {validandoOpId === sel.operacionId ? "Validando…" : "Validar"}
+                                        </button>
+                                    )}
 
                                 {String(sel.estado || "").toUpperCase() === "PENDIENTE" && canPublicar && (
                                     <button
                                         onClick={() => aprobarOperacion(sel)}
                                         disabled={aprobandoOpId === sel.operacionId}
-                                        className={`${BTN_TABLE} bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-300`}
-                                    >
+                                        className={BTN_TABLE_ACCENT}>
                                         {aprobandoOpId === sel.operacionId ? "Publicando…" : "Publicar"}
                                     </button>
                                 )}
+
+                                {String(sel.estado || "").toUpperCase() === "VALIDADO" &&
+                                    (rolesNorm.includes("ADMIN") || canPublicar) && (
+                                        <button
+                                            onClick={() => finalizarOperacion(sel)}
+                                            disabled={finalizandoOpId === sel.operacionId}
+                                            className={BTN_TABLE_ACCENT}>
+                                            {finalizandoOpId === sel.operacionId ? "Finalizando…" : "Finalizar"}
+                                        </button>
+                                    )}
                             </div>
 
                             <div className="overflow-x-auto border rounded-xl">
@@ -773,8 +877,7 @@ export default function ListarCambios() {
                                                 {niveles.map((n, idx) => (
                                                     <td
                                                         key={`niv-${i}-${idx}`}
-                                                        className="py-2 px-4 text-right whitespace-nowrap min-w-[92px] bg-[#F1F6FA] border-b border-[#E0ECF4]"
-                                                    >
+                                                        className="py-2 px-4 text-right whitespace-nowrap min-w-[92px] bg-[#F1F6FA] border-b border-[#E0ECF4]">
                                                         {fmtCOP(n)}
                                                     </td>
                                                 ))}
@@ -793,10 +896,7 @@ export default function ListarCambios() {
                             </div>
 
                             <div className="flex justify-end pt-1">
-                                <button
-                                    onClick={closeModal}
-                                    className={`${BTN_TABLE} border border-slate-300 text-slate-700 hover:bg-slate-100 focus:ring-slate-300`}
-                                >
+                                <button onClick={closeModal} className={BTN_TABLE_OUTLINE}>
                                     Cerrar
                                 </button>
                             </div>
@@ -806,7 +906,7 @@ export default function ListarCambios() {
             )}
 
             {toasts.length > 0 && (
-                <div className="fixed top-3 left-1/2 -translate-x-1/2 md:top-auto md:left-auto md:translate-x-0 md:bottom-4 md:right-4 z=[9999] space-y-2 w-[calc(100%-1.5rem)] max-w-sm">
+                <div className="fixed top-3 left-1/2 -translate-x-1/2 md:top-auto md:left-auto md:translate-x-0 md:bottom-4 md:right-4 z-[9999] space-y-2 w-[calc(100%-1.5rem)] max-w-sm">
                     {toasts.map((t) => (
                         <ToastItem
                             key={t.id}

@@ -51,7 +51,9 @@ export default function AuthLogin({ onLoginSuccess }) {
 
             const text = await res.text();
             let data = {};
-            try { data = JSON.parse(text); } catch {}
+            try {
+                data = JSON.parse(text);
+            } catch {}
 
             if (res.ok && data.success) {
                 localStorage.setItem("correo", data.correo || email.trim());
@@ -76,16 +78,26 @@ export default function AuthLogin({ onLoginSuccess }) {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-white px-4 py-10">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#F1F6FA] to-white px-4 py-10">
             <div className="w-full max-w-md">
-                <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
-                    <div className="h-2 w-full bg-gradient-to-r from-purple-700 to-purple-500" />
+                <form
+                    onSubmit={handleSubmit}
+                    className="bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden"
+                >
+                    <div className="h-2 w-full bg-gradient-to-r from-[#0D2A45] to-[#103654]" />
                     <div className="p-6 sm:p-8">
                         <div className="flex items-center justify-center mb-5">
-                            <img src={logoRecamier} alt="Recamier" className="h-16 sm:h-20 w-auto object-contain" loading="eager" />
+                            <img
+                                src={logoRecamier}
+                                alt="Recamier Actualización de precios"
+                                className="h-40 sm:h-44 w-auto object-contain mx-auto scale-135 drop-shadow-lg"
+                                loading="eager"
+                            />
                         </div>
 
-                        <h1 className="text-2xl font-extrabold text-center text-gray-900 mb-6">Inicia sesión</h1>
+                        <h1 className="text-2xl font-extrabold text-center text-gray-900 mb-6">
+                            Inicia sesión
+                        </h1>
 
                         <div className="mb-4">
                             <label className="font-medium text-sm text-gray-800">Correo electrónico</label>
@@ -95,7 +107,7 @@ export default function AuthLogin({ onLoginSuccess }) {
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="tucorreo@recamier.com"
                                 autoFocus
-                                className="w-full mt-1 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                                className="w-full mt-1 rounded-md border border-[#C8D5E4] bg-gray-50 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0D2A45]/40"
                             />
                         </div>
 
@@ -108,7 +120,7 @@ export default function AuthLogin({ onLoginSuccess }) {
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="Contraseña"
                                     autoComplete="current-password"
-                                    className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 pr-10 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                                    className="w-full rounded-md border border-[#C8D5E4] bg-gray-50 px-3 py-2 pr-10 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0D2A45]/40"
                                 />
                                 <button
                                     type="button"
@@ -136,10 +148,14 @@ export default function AuthLogin({ onLoginSuccess }) {
 
                         <button
                             type="submit"
-                            onClick={(e) => { if (!disableBtn) handleSubmit(e); }}
+                            onClick={(e) => {
+                                if (!disableBtn) handleSubmit(e);
+                            }}
                             disabled={disableBtn}
                             className={`mt-4 w-full py-2.5 rounded-xl text-white font-semibold transition-colors ${
-                                disableBtn ? "bg-purple-300 cursor-not-allowed" : "bg-purple-700 hover:bg-purple-800"
+                                disableBtn
+                                    ? "bg-[#0D2A45]/40 cursor-not-allowed"
+                                    : "bg-[#0D2A45] hover:bg-[#103654]"
                             }`}
                         >
                             {loading ? "Ingresando…" : "Ingresar"}
