@@ -443,7 +443,10 @@ export default function ListarCambios() {
             }
             if (!res.ok || j?.ok === false) throw new Error(j?.error || j?.mensaje || "No se pudo finalizar la operación.");
 
-            pushToast(`✅ Operación #${operacion.operacionId} finalizada correctamente.`, "success");
+            setShowModalExito({
+                id: operacion.operacionId,
+                mensaje: `La operación #${operacion.operacionId} fue finalizada exitosamente y quedó registrada en la compañía de cambio de precios.`,
+            });
             closeModal();
             await cargar();
         } catch (e) {
@@ -452,6 +455,8 @@ export default function ListarCambios() {
             setFinalizandoOpId(null);
         }
     };
+
+    const [showModalExito, setShowModalExito] = useState(null);
 
     /* Tarjeta móvil */
     const TarjetaOperacion = ({ op }) => {
@@ -915,6 +920,24 @@ export default function ListarCambios() {
                             onClose={() => setToasts((p) => p.filter((x) => x.id !== t.id))}
                         />
                     ))}
+                </div>
+            )}
+
+            {showModalExito && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md text-center animate-[fadeIn_.3s_ease-in]">
+                        <div className="text-5xl text-emerald-500 mb-4">✔</div>
+                        <h2 className="text-xl font-bold text-gray-900 mb-2">Proceso exitoso</h2>
+                        <p className="text-gray-700 mb-6">
+                            {showModalExito.mensaje}
+                        </p>
+                        <button
+                            onClick={() => setShowModalExito(null)}
+                            className="bg-[#0D2A45] text-white px-6 py-2 rounded-lg hover:bg-[#0D2A45]/90 transition"
+                        >
+                            Aceptar
+                        </button>
+                    </div>
                 </div>
             )}
         </section>

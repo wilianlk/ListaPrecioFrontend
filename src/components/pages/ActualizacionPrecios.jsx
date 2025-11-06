@@ -98,7 +98,7 @@ function calcularNivelesBase(base, porcentajes = []) {
 
 function calcularNiveles(base, porcentajes = [], nivelesAnteriores = [], ivaUsuario = 19) {
     const b = Number(base || 0);
-    const ivaFactor = 1 + (Number(ivaUsuario) / 100); // convierte 19 → 1.19
+    const ivaFactor = 1 + (Number(ivaUsuario) / 100); // 19 -> 1.19
 
     return Array.from({ length: 9 }, (_, i) => {
         // L4 NO se recalcula (índice 3)
@@ -107,12 +107,18 @@ function calcularNiveles(base, porcentajes = [], nivelesAnteriores = [], ivaUsua
 
         let valor;
 
-        // ✅ L6 ignora su porcentaje y usa el IVA dinámico del usuario
+        // L6: usa IVA dinámico
         if (i === 5) {
             const valorConIva = b * ivaFactor;
             const redondeado = redondearCentena(valorConIva);
-            valor = redondeado / ivaFactor; // sin redondear el resultado final
-        } else {
+            valor = redondearCentena(redondeado / ivaFactor);
+        }
+        // L2 (i=1) y L8 (i=7): SIN redondeo a centena
+        else if (i === 1 || i === 7) {
+            valor = b * (toPctInt(porcentajes[i]) / 100);
+        }
+        // Resto: con redondeo a centena
+        else {
             valor = b * (toPctInt(porcentajes[i]) / 100);
             valor = redondearCentena(valor);
         }
@@ -120,7 +126,6 @@ function calcularNiveles(base, porcentajes = [], nivelesAnteriores = [], ivaUsua
         return valor;
     });
 }
-
 
 /* ===========================
    Debounce
@@ -244,7 +249,7 @@ const RowProducto = React.memo(function RowProducto({ p, valorGlobal, onCommit, 
         [incNum, p.precioLista]
     );
 
-    // 🔹 ahora el IVA dinámico se usa aquí
+    // IVA dinámico aquí
     const niveles = useMemo(
         () => calcularNiveles(nuevoPrecioLista, p.porcentajes, p.nivelesPrevios, iva),
         [nuevoPrecioLista, p.porcentajes, p.nivelesPrevios, iva]
@@ -306,6 +311,7 @@ function ActualizacionPrecios() {
     const API_OPERAR_URL = `${apiBaseURL}/api/ListasPrecios/operar`;
 
     const [iva, setIva] = useState(19);
+    const [incrementalValor, setIncrementalValor] = useState(0);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState("");
     const [productos, setProductos] = useState([]);
@@ -314,9 +320,12 @@ function ActualizacionPrecios() {
     const [operando, setOperando] = useState(false);
     const [operacionId, setOperacionId] = useState(null);
 
-    // Filtros anidados
+    // Checkbox: incremento global
+    const [incrementalGlobal, setIncrementalGlobal] = useState(false);
+
+    // Filtros
     const [lineaSel, setLineaSel] = useState("");
-    const [sublineaSel, setSublineaSel] = useState("");
+    const [sublineaSel, setSublineaSel] = useState(""); // <- aquí estaba el typo
     const [productosSel, setProductosSel] = useState(new Set()); // códigos
 
     // Toasts
@@ -384,7 +393,7 @@ function ActualizacionPrecios() {
                     : calcularNivelesBase(lista, porcentajes)
             ).map((x) => Number(x || 0));
 
-            // 🔒 AJUSTE: L4 SIEMPRE = PRECIO ACTUAL (sin redondeo ni porcentaje)
+            // L4 SIEMPRE = PRECIO ACTUAL
             nivelesPrevios[3] = Number(lista);
 
             const codigo = String(p?.pr_id || p?.id || "-").trim();
@@ -426,7 +435,7 @@ function ActualizacionPrecios() {
     }, [dataset]);
 
     const opcionesProductoIndex = useMemo(() => {
-        const m = new Map(); // key = `${linea}::${sublinea}`
+        const m = new Map();
         for (const r of dataset) {
             const key = `${r.linea}::${r.sublinea}`;
             if (!m.has(key)) m.set(key, []);
@@ -482,17 +491,36 @@ function ActualizacionPrecios() {
         });
     }, [dataset, lineaSel, sublineaSel, productosSel]);
 
-    // Versión solo para render (ordenada por línea → producto) para que la agrupación sea continua
+    // Prefill % incremento con IVA cuando el check está activo (para visibles)
+    useEffect(() => {
+        if (!incrementalGlobal) return;
+        setIncrementos((prev) => {
+            const next = { ...prev };
+            rowsFiltrados.forEach((p) => { next[p.codigo] = String(incrementalValor); });
+            return next;
+        });
+    }, [incrementalGlobal, incrementalValor, rowsFiltrados]);
+
+    // Versión solo para render
     const rowsParaRender = useMemo(() => {
         return [...rowsFiltrados].sort(
             (a, b) => a.linea.localeCompare(b.linea, "es") || a.producto.localeCompare(b.producto, "es")
         );
     }, [rowsFiltrados]);
 
-    // Commit de incremento por fila
+    // Commit de incremento por fila (replica si el check está activo)
     const commitIncremento = useCallback((codigo, valor) => {
-        setIncrementos((prev) => { if (prev[codigo] === valor) return prev; return { ...prev, [codigo]: valor }; });
-    }, []);
+        setIncrementos((prev) => {
+            if (incrementalGlobal) {
+                const next = { ...prev };
+                rowsFiltrados.forEach(p => { next[p.codigo] = valor; });
+                return next;
+            } else {
+                if (prev[codigo] === valor) return prev;
+                return { ...prev, [codigo]: valor };
+            }
+        });
+    }, [incrementalGlobal, rowsFiltrados]);
 
     const construirCambios = useCallback(() => {
         return rowsFiltrados.reduce((acc, p) => {
@@ -507,7 +535,7 @@ function ActualizacionPrecios() {
             acc.push({ codigo: p.codigo, precioActual: Number(p.precioLista), incrementoPct: inc, nuevoPrecioLista, niveles });
             return acc;
         }, []);
-    }, [rowsFiltrados, incrementos]);
+    }, [rowsFiltrados, incrementos, iva]);
 
     const forceCommitFocus = () => {
         if (typeof document !== "undefined" && document.activeElement && "blur" in document.activeElement) {
@@ -516,28 +544,18 @@ function ActualizacionPrecios() {
     };
 
     const goToListarCambios = () => {
-        try {
-            // 🔹 Dispara el evento global (igual que goToActualizacion)
-            window.dispatchEvent(new CustomEvent("lp:goto", { detail: "listarCambios" }));
-        } catch {}
+        try { window.dispatchEvent(new CustomEvent("lp:goto", { detail: "listarCambios" })); } catch {}
 
         try {
-            // 🔹 Busca el botón del menú lateral con texto “Listar Precios” o “Listar Cambios”
             const candidates = Array.from(document.querySelectorAll("aside button, aside a, nav button, nav a"));
             const target = candidates.find((el) => {
                 const txt = (el.textContent || el.title || "").toLowerCase();
                 return txt.includes("listar precios") || txt.includes("listar cambios");
             });
-            if (target) {
-                target.click();
-                return;
-            }
+            if (target) { target.click(); return; }
         } catch {}
 
-        try {
-            // 🔹 Fallback: guarda el tab en localStorage
-            localStorage.setItem("LP_TARGET_TAB", "listarCambios");
-        } catch {}
+        try { localStorage.setItem("LP_TARGET_TAB", "listarCambios"); } catch {}
     };
 
     const operar = async (accion) => {
@@ -554,11 +572,7 @@ function ActualizacionPrecios() {
             const data = await res.json().catch(() => ({}));
             pushToast(`✅ ${accion === "GUARDAR" ? "Guardado" : "Aprobado"}: ${data?.procesados ?? cambios.length} ítem(s).`, "success");
 
-            // 🔹 Redirige automáticamente a “Listar Cambios”
-            setTimeout(() => {
-                goToListarCambios();
-            }, 1000);
-
+            setTimeout(() => { goToListarCambios(); }, 1000);
         } catch (e) {
             pushToast(`❌ Error al ${accion === "GUARDAR" ? "guardar" : "aprobar"}: ${e?.message || "desconocido"}`, "error");
         } finally { setOperando(false); }
@@ -569,8 +583,9 @@ function ActualizacionPrecios() {
             <Card className="shadow-lg">
                 <CardContent className="space-y-4">
                     {/* ===== Panel de filtros ===== */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-[#0D2A45]/5 p-3 rounded-md">
-                        <div className="flex flex-col">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-x-4 gap-y-2 bg-[#0D2A45]/5 p-3 rounded-md items-end">
+
+                    <div className="flex flex-col">
                             <label className="font-semibold text-sm text-gray-700">Línea</label>
                             <SimpleSelect value={lineaSel} onChange={setLineaSel} options={lineaOptions} placeholder="Todas" />
                         </div>
@@ -588,7 +603,39 @@ function ActualizacionPrecios() {
 
                         <div className="flex flex-col">
                             <label className="font-semibold text-sm text-gray-700">% IVA</label>
-                            <Input type="number" step="any" value={iva} onChange={(e) => setIva(parseFloat(e.target.value) || 0)} className="w-24 text-center" />
+                            <Input
+                                type="number"
+                                step="any"
+                                value={iva}
+                                disabled
+                                onChange={(e) => setIva(parseFloat(e.target.value) || 0)}
+                                className="w-24 text-center bg-gray-100 cursor-not-allowed"
+                            />
+                        </div>
+
+                        <div className="flex flex-col">
+                            <label className="font-semibold text-sm text-gray-700">Valor Porcentaje Incremental Masivo</label>
+                            <Input
+                                type="number"
+                                step="any"
+                                value={incrementalValor}
+                                onChange={(e) => setIncrementalValor(parseFloat(e.target.value) || 0)}
+                                className="w-24 text-center"
+                                placeholder="0"
+                            />
+                        </div>
+
+                        {/* Checkbox grande al lado del IVA */}
+                        <div className="flex items-center mt-4 md:mt-0">
+                            <label className="font-semibold text-[15px] text-gray-700 flex items-center gap-3 py-2 px-3 bg-white rounded-md border border-gray-300 shadow-sm hover:shadow transition">
+                                <input
+                                    type="checkbox"
+                                    checked={incrementalGlobal}
+                                    onChange={(e) => setIncrementalGlobal(e.target.checked)}
+                                    className="w-5 h-5 accent-[#0D2A45] cursor-pointer"
+                                />
+                                En este proceso se incrementa el valor incremental para todos los productos
+                            </label>
                         </div>
 
                         <div className="md:col-span-4">
@@ -636,7 +683,7 @@ function ActualizacionPrecios() {
 
                                 <tbody>
                                 {(() => {
-                                    // AGRUPACIÓN POR LÍNEA (encabezado por grupo)
+                                    // AGRUPACIÓN POR LÍNEA
                                     const out = [];
                                     let lastLinea = "";
                                     for (let i = 0; i < rowsParaRender.length; i++) {
@@ -694,8 +741,8 @@ function ActualizacionPrecios() {
 
             {/* Animación simple */}
             <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+            `}</style>
         </div>
     );
 }

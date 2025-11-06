@@ -173,7 +173,7 @@ export default function AdminLayout({
                     <img
                         src="/img/logo-recamier.png"
                         alt="Recamier"
-                        className="h-14 w-auto object-contain drop-shadow"
+                        className="h-16 w-[160px] object-contain bg-[#F4F6F8] p-1.5 shadow-[0_0_10px_rgba(255,255,255,0.3)] ring-1 ring-white/20"
                         loading="eager"
                     />
                 </div>
