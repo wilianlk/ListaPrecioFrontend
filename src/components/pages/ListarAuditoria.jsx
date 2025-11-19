@@ -469,7 +469,8 @@ export default function ListarAuditoria() {
                                                     <div className="text-sm font-semibold text-slate-800">Rev #{rv.revisionNum} — {rv.fecha || "-"}</div>
                                                     <div className="text-xs text-slate-600">
                                                         Estado: <b>{rv.estadoAnterior || "-"}</b> → <b>{rv.estadoNuevo || "-"}</b> &nbsp;•&nbsp;
-                                                        Acción: <b>{rv.accion || "-"}</b>
+                                                        Acción: <b>{rv.accion || "-"}</b> &nbsp;•&nbsp;
+                                                        Hecho por: <b>{rv.usuarioNombre || rv.usuario || "—"}</b>
                                                     </div>
                                                     {rv.observacion && <div className="text-xs text-slate-600 mt-1">Obs: {rv.observacion}</div>}
                                                 </div>

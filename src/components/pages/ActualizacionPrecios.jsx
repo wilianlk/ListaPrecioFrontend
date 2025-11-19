@@ -322,6 +322,8 @@ function ActualizacionPrecios() {
 
     // Checkbox: incremento global
     const [incrementalGlobal, setIncrementalGlobal] = useState(false);
+    const [productosModificados, setProductosModificados] = useState({});
+    const [masivoScope, setMasivoScope] = useState(new Set());
 
     // Filtros
     const [lineaSel, setLineaSel] = useState("");
@@ -422,6 +424,13 @@ function ActualizacionPrecios() {
         return d;
     }, [productos]);
 
+    // 🔹 Índice por código para búsquedas aunque no estén visibles
+    const datasetIndex = useMemo(() => {
+        const m = new Map();
+        for (const p of dataset) m.set(p.codigo, p);
+        return m;
+    }, [dataset]);
+
     const lineas = useMemo(() => {
         const s = new Set(); dataset.forEach((r) => { if (r.linea) s.add(r.linea); });
         return Array.from(s).sort((a, b) => a.localeCompare(b, "es"));
@@ -492,14 +501,27 @@ function ActualizacionPrecios() {
     }, [dataset, lineaSel, sublineaSel, productosSel]);
 
     // Prefill % incremento con IVA cuando el check está activo (para visibles)
+    // Aplica el incremento masivo solo a un scope "congelado" del filtro vigente
     useEffect(() => {
-        if (!incrementalGlobal) return;
-        setIncrementos((prev) => {
+        if (!incrementalGlobal) return; // No hace nada si no está activo
+
+        // 🔹 Captura todos los productos visibles en ese momento
+        const freeze = new Set(rowsFiltrados.map(p => p.codigo));
+        setMasivoScope(freeze);
+
+        // 🔹 Actualiza solo los visibles, manteniendo los anteriores
+        setIncrementos(prev => {
             const next = { ...prev };
-            rowsFiltrados.forEach((p) => { next[p.codigo] = String(incrementalValor); });
+            freeze.forEach(c => {
+                next[c] = String(incrementalValor);
+            });
             return next;
         });
-    }, [incrementalGlobal, incrementalValor, rowsFiltrados]);
+
+        // 🔹 Espera a que termine la animación antes de desactivar el switch
+        setTimeout(() => setIncrementalGlobal(false), 400);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [incrementalGlobal, incrementalValor]);
 
     // Versión solo para render
     const rowsParaRender = useMemo(() => {
@@ -513,29 +535,42 @@ function ActualizacionPrecios() {
         setIncrementos((prev) => {
             if (incrementalGlobal) {
                 const next = { ...prev };
-                rowsFiltrados.forEach(p => { next[p.codigo] = valor; });
+                masivoScope.forEach(code => { next[code] = valor; });
                 return next;
             } else {
                 if (prev[codigo] === valor) return prev;
                 return { ...prev, [codigo]: valor };
             }
         });
-    }, [incrementalGlobal, rowsFiltrados]);
 
+        // 🔹 Guarda también el producto modificado globalmente
+        const producto = rowsFiltrados.find(p => p.codigo === codigo);
+        if (producto) {
+            setProductosModificados(prev => ({
+                ...prev,
+                [codigo]: { ...producto, incremento: valor }
+            }));
+        }
+    }, [incrementalGlobal, masivoScope, rowsFiltrados]);
+
+    // 🔹 Construye cambios desde TODOS los incrementos guardados (no solo los visibles)
     const construirCambios = useCallback(() => {
-        return rowsFiltrados.reduce((acc, p) => {
-            const incStr = incrementos[p.codigo];
-            if (incStr === undefined || incStr === "") return acc;
+        const out = [];
+        for (const [codigo, incStr] of Object.entries(incrementos)) {
+            if (incStr === undefined || incStr === "") continue;
             const inc = parseFloat(incStr);
-            if (!Number.isFinite(inc) || inc === 0) return acc;
+            if (!Number.isFinite(inc) || inc === 0) continue;
+
+            const p = datasetIndex.get(codigo);
+            if (!p) continue; // por si el catálogo cambió
 
             const nuevoPrecioLista = inc === 0 ? Number(p.precioLista) : redondearCentena(p.precioLista * (1 + inc / 100));
             const niveles = calcularNiveles(nuevoPrecioLista, p.porcentajes, p.nivelesPrevios, iva);
 
-            acc.push({ codigo: p.codigo, precioActual: Number(p.precioLista), incrementoPct: inc, nuevoPrecioLista, niveles });
-            return acc;
-        }, []);
-    }, [rowsFiltrados, incrementos, iva]);
+            out.push({ codigo, precioActual: Number(p.precioLista), incrementoPct: inc, nuevoPrecioLista, niveles });
+        }
+        return out;
+    }, [incrementos, datasetIndex, iva]);
 
     const forceCommitFocus = () => {
         if (typeof document !== "undefined" && document.activeElement && "blur" in document.activeElement) {
@@ -585,7 +620,7 @@ function ActualizacionPrecios() {
                     {/* ===== Panel de filtros ===== */}
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-x-4 gap-y-2 bg-[#0D2A45]/5 p-3 rounded-md items-end">
 
-                    <div className="flex flex-col">
+                        <div className="flex flex-col">
                             <label className="font-semibold text-sm text-gray-700">Línea</label>
                             <SimpleSelect value={lineaSel} onChange={setLineaSel} options={lineaOptions} placeholder="Todas" />
                         </div>
@@ -628,12 +663,19 @@ function ActualizacionPrecios() {
                         {/* Checkbox grande al lado del IVA */}
                         <div className="flex items-center mt-4 md:mt-0">
                             <label className="font-semibold text-[15px] text-gray-700 flex items-center gap-3 py-2 px-3 bg-white rounded-md border border-gray-300 shadow-sm hover:shadow transition">
-                                <input
-                                    type="checkbox"
-                                    checked={incrementalGlobal}
-                                    onChange={(e) => setIncrementalGlobal(e.target.checked)}
-                                    className="w-5 h-5 accent-[#0D2A45] cursor-pointer"
-                                />
+                                {/* Checkbox animado tipo switch */}
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={incrementalGlobal}
+                                        onChange={(e) => setIncrementalGlobal(e.target.checked)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-[#0D2A45] transition-all duration-300"></div>
+                                    <div className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-all duration-300 peer-checked:translate-x-5"></div>
+                                </label>
+
+                                {/* Texto descriptivo al lado */}
                                 En este proceso se incrementa el valor incremental para todos los productos
                             </label>
                         </div>

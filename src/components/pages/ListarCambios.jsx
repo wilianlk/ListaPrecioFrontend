@@ -456,6 +456,53 @@ export default function ListarCambios() {
         }
     };
 
+    // eliminar
+    const [eliminandoOpId, setEliminandoOpId] = useState(null);
+    const eliminarOperacion = async (operacion) => {
+        if (!operacion) return;
+        const st = String(operacion.estado || "").toUpperCase();
+
+        if (st !== "PENDIENTE") {
+            pushToast("Solo se pueden eliminar operaciones en estado PENDIENTE.", "warning");
+            return;
+        }
+
+        if (!window.confirm(`¿Eliminar la operación #${operacion.operacionId}? Esta acción dejará trazabilidad en el historial.`))
+            return;
+
+        let identificacion = localStorage.getItem("identificacion");
+        if (!identificacion) {
+            identificacion = prompt("Ingresa tu identificación:");
+            if (identificacion) localStorage.setItem("identificacion", identificacion);
+        }
+
+        const payload = {
+            operacionId: operacion.operacionId,
+            identificacion
+        };
+
+        try {
+            setEliminandoOpId(operacion.operacionId);
+            const res = await fetch(`${apiBaseURL}/api/ListasPrecios/eliminar`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const txt = await res.text();
+            const j = JSON.parse(txt || "{}");
+
+            if (!res.ok || j?.ok === false)
+                throw new Error(j?.mensaje || "No se pudo eliminar la operación.");
+
+            pushToast(`🗑️ Operación #${operacion.operacionId} eliminada.`, "success");
+            await cargar();
+        } catch (e) {
+            pushToast(`❌ Error eliminando operación: ${e?.message || "desconocido"}`, "error");
+        } finally {
+            setEliminandoOpId(null);
+        }
+    };
+
     const [showModalExito, setShowModalExito] = useState(null);
 
     /* Tarjeta móvil */
@@ -501,7 +548,7 @@ export default function ListarCambios() {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                        {st === "PENDIENTE" && (
+                        {st === "PENDIENTE" && String(op.estado || "").toUpperCase() !== "ELIMINADO" && (
                             <button
                                 onClick={() => {
                                     localStorage.setItem("LP_LAST_OP_ID", String(op.operacionId));
@@ -509,6 +556,16 @@ export default function ListarCambios() {
                                 }}
                                 className={BTN_OUTLINE}>
                                 Continuar en actualización
+                            </button>
+                        )}
+
+                        {op && String(op.estado || "").toUpperCase() === "PENDIENTE" && (
+                            <button
+                                onClick={() => eliminarOperacion(op)}
+                                disabled={eliminandoOpId && eliminandoOpId === op.operacionId}
+                                className={`${BTN_TABLE_OUTLINE} text-rose-700 border-rose-300 hover:bg-rose-50`}
+                            >
+                                {eliminandoOpId && eliminandoOpId === op.operacionId ? "Eliminando…" : "Eliminar"}
                             </button>
                         )}
 
@@ -689,7 +746,8 @@ export default function ListarCambios() {
                                         </td>
                                         <td className="py-3 px-4">
                                             <div className="flex flex-col items-start gap-2">
-                                                {st === "PENDIENTE" && (
+
+                                                {st === "PENDIENTE" && String(r.estado || "").toUpperCase() !== "ELIMINADO" && (
                                                     <button
                                                         onClick={() => {
                                                             localStorage.setItem("LP_LAST_OP_ID", String(r.operacionId));
@@ -697,6 +755,16 @@ export default function ListarCambios() {
                                                         }}
                                                         className={BTN_TABLE_OUTLINE}>
                                                         Continuar en actualización
+                                                    </button>
+                                                )}
+
+                                                {st === "PENDIENTE" && (
+                                                    <button
+                                                        onClick={() => eliminarOperacion(r)}
+                                                        disabled={eliminandoOpId === r.operacionId}
+                                                        className={`${BTN_TABLE_OUTLINE} text-rose-700 border-rose-300 hover:bg-rose-50`}
+                                                    >
+                                                        {eliminandoOpId === r.operacionId ? "Eliminando…" : "Eliminar"}
                                                     </button>
                                                 )}
 
@@ -797,10 +865,12 @@ export default function ListarCambios() {
                                     <div className="text-xs text-gray-500">% IVA</div>
                                     <div className="text-sm text-gray-800">{Number(sel.iva ?? 0).toFixed(0)}%</div>
                                 </div>
+
                             </div>
 
                             <div className="flex flex-wrap justify-end gap-2">
-                                {String(sel.estado || "").toUpperCase() === "PENDIENTE" && (
+
+                                {String(sel.estado || "").toUpperCase() === "PENDIENTE" && String(sel.estado || "").toUpperCase() !== "ELIMINADO" && (
                                     <button
                                         onClick={() => {
                                             localStorage.setItem("LP_LAST_OP_ID", String(sel.operacionId));
@@ -808,6 +878,16 @@ export default function ListarCambios() {
                                         }}
                                         className={BTN_TABLE_OUTLINE}>
                                         Continuar en actualización
+                                    </button>
+                                )}
+
+                                {String(sel.estado || "").toUpperCase() === "PENDIENTE" && (
+                                    <button
+                                        onClick={() => eliminarOperacion(sel)}
+                                        disabled={eliminandoOpId === sel.operacionId}
+                                        className={`${BTN_TABLE_OUTLINE} text-rose-700 border-rose-300 hover:bg-rose-50`}
+                                    >
+                                        {eliminandoOpId === sel.operacionId ? "Eliminando…" : "Eliminar"}
                                     </button>
                                 )}
 
@@ -841,11 +921,12 @@ export default function ListarCambios() {
                                     )}
                             </div>
 
-                            <div className="overflow-x-auto border rounded-xl">
+                            <div className="overflow-x-auto border rounded-xl max-h-[60vh] overflow-y-auto">
                                 <table className="min-w-[900px] w-full text-sm">
                                     <thead>
                                     <tr className="bg-[#D9E6F2] text-[#0D2A45]">
                                         <th className="py-3 px-4 text-left font-semibold">CÓDIGO</th>
+                                        <th className="py-3 px-4 text-left font-semibold">DESCRIPCIÓN</th>
                                         <th className="py-3 px-4 text-right font-semibold">PRECIO ACTUAL</th>
                                         <th className="py-3 px-4 text-center font-semibold">INC %</th>
                                         <th className="py-3 px-4 text-right font-semibold">NUEVO PRECIO</th>
@@ -876,6 +957,7 @@ export default function ListarCambios() {
                                         return (
                                             <tr key={`det-${i}`} className={i % 2 ? "bg-white" : "bg-gray-50"}>
                                                 <td className="py-2 px-4 font-semibold text-slate-800">{prId}</td>
+                                                <td className="py-2 px-4 text-gray-800">{d.prDesc || "-"}</td>
                                                 <td className="py-2 px-4 text-right">{fmtCOP(d.precioActual ?? d.precio_actual ?? 0)}</td>
                                                 <td className="py-2 px-4 text-center">{inc.toFixed(2)}%</td>
                                                 <td className="py-2 px-4 text-right font-medium text-slate-800">{fmtCOP(nuevoPrecio)}</td>
