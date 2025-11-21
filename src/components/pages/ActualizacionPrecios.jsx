@@ -234,14 +234,12 @@ const DropdownMultiSelect = React.memo(function DropdownMultiSelect({
     );
 });
 
-/* ===========================
-   Fila de tabla (memo) con estado local
-   =========================== */
-
 const RowProducto = React.memo(function RowProducto({ p, valorGlobal, onCommit, iva }) {
-    const [local, setLocal] = useState(() => (valorGlobal ?? "0"));
+    const [local, setLocal] = useState(() => valorGlobal);
 
-    useEffect(() => { setLocal(valorGlobal ?? "0"); }, [valorGlobal, p.codigo]);
+    useEffect(() => {
+        setLocal(valorGlobal ?? "");
+    }, [valorGlobal, p.codigo]);
 
     const incNum = useMemo(() => { const n = parseFloat(local); return Number.isFinite(n) ? n : 0; }, [local]);
     const nuevoPrecioLista = useMemo(
@@ -257,7 +255,7 @@ const RowProducto = React.memo(function RowProducto({ p, valorGlobal, onCommit, 
 
     const commitValor = useCallback((raw) => {
         const vRaw = (raw ?? "").toString().trim();
-        const v = vRaw === "" ? "0" : vRaw;
+        const v = vRaw === "" ? "" : vRaw;
         setLocal(v);
         onCommit(p.codigo, v);
     }, [onCommit, p.codigo]);
@@ -559,7 +557,7 @@ function ActualizacionPrecios() {
         for (const [codigo, incStr] of Object.entries(incrementos)) {
             if (incStr === undefined || incStr === "") continue;
             const inc = parseFloat(incStr);
-            if (!Number.isFinite(inc) || inc === 0) continue;
+            if (!Number.isFinite(inc)) continue; // ← eliminamos la condición inc === 0
 
             const p = datasetIndex.get(codigo);
             if (!p) continue; // por si el catálogo cambió
@@ -744,7 +742,7 @@ function ActualizacionPrecios() {
                                             <RowProducto
                                                 key={`${p.codigo}-${i}`}
                                                 p={p}
-                                                valorGlobal={incrementos[p.codigo] ?? "0"}
+                                                valorGlobal={incrementos[p.codigo] ?? ""}
                                                 onCommit={commitIncremento}
                                                 iva={iva}
                                             />
