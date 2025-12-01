@@ -96,9 +96,8 @@ function calcularNivelesBase(base, porcentajes = []) {
     return Array.from({ length: 9 }, (_, i) => redondearCentena(b * (toPctInt(porcentajes[i]) / 100)));
 }
 
-function calcularNiveles(base, porcentajes = [], nivelesAnteriores = [], ivaUsuario = 19) {
+function calcularNiveles(base, porcentajes = [], nivelesAnteriores = [], ivaUsuario = 19, preciosApi = {}, incrementoPct = 0) {
     const b = Number(base || 0);
-    const ivaFactor = 1 + (Number(ivaUsuario) / 100); // 19 -> 1.19
 
     return Array.from({ length: 9 }, (_, i) => {
         // L4 NO se recalcula (índice 3)
@@ -109,12 +108,32 @@ function calcularNiveles(base, porcentajes = [], nivelesAnteriores = [], ivaUsua
 
         // L6: usa IVA dinámico
         if (i === 5) {
-            const valorConIva = b * ivaFactor;
-            const redondeado = redondearCentena(valorConIva);
-            valor = redondearCentena(redondeado / ivaFactor);
+
+            const valorApi = Number(preciosApi?.pr6);
+            const baseListaApi = Number(preciosApi?.lista) || 0;
+            const baseListaActual = redondearCentena(Number(base) || 0);
+            const ivaFactor = 1 + (Number(ivaUsuario) || 0) / 100;
+            const porcentajeL6 = toPctInt(porcentajes[5]) / 100;
+
+            // 🔹 SIN incremento (lista igual a la original) → usar pr6 tal cual
+            if (baseListaApi > 0 && baseListaActual === baseListaApi && valorApi > 0) {
+                return valorApi;
+            }
+
+            // 🔹 CON incremento (lista cambió) → calcular L6 sobre la NUEVA lista con IVA
+            if (porcentajeL6 > 0) {
+                const sinIva = baseListaActual * porcentajeL6;   // base = nuevo precio lista
+                const conIva = sinIva * ivaFactor;               // aplicar 1.19
+                const redondeado = redondearCentena(conIva);     // redondear con IVA
+                return redondeado / ivaFactor;                   // volver a neto
+            }
+
+            // 🔹 Fallback
+            return valorApi || baseListaActual;
         }
-        // L2 (i=1) y L8 (i=7): SIN redondeo a centena
-        else if (i === 1 || i === 7) {
+
+        // L1 (i=0), L2 (i=1), L8 (i=7) y L9 (i=8): SIN redondeo a centena
+        else if (i === 0 || i === 1 || i === 7 || i === 8) {
             valor = b * (toPctInt(porcentajes[i]) / 100);
         }
         // Resto: con redondeo a centena
@@ -249,8 +268,15 @@ const RowProducto = React.memo(function RowProducto({ p, valorGlobal, onCommit, 
 
     // IVA dinámico aquí
     const niveles = useMemo(
-        () => calcularNiveles(nuevoPrecioLista, p.porcentajes, p.nivelesPrevios, iva),
-        [nuevoPrecioLista, p.porcentajes, p.nivelesPrevios, iva]
+        () => calcularNiveles(
+            nuevoPrecioLista,
+            p.porcentajes,
+            p.nivelesPrevios,
+            iva,
+            p.precios,
+            incNum
+        ),
+        [nuevoPrecioLista, p.porcentajes, p.nivelesPrevios, iva, p.precios, incNum]
     );
 
     const commitValor = useCallback((raw) => {
@@ -288,7 +314,7 @@ const RowProducto = React.memo(function RowProducto({ p, valorGlobal, onCommit, 
                     key={`lvl-${p.codigo}-${idx}`}
                     className="px-3 py-2 text-right align-top whitespace-nowrap bg-[#F1F6FA] border-b border-[#E0ECF4] min-w-[110px]"
                 >
-                    <div className="text-[11px] font-semibold text-[#0D2A45] mb-1 text-right">
+                    <div className="text-[11px] font-semibold text-[#0D2A45] mb-1 text-right" >
                         {p.porcentajes[idx] != null ? Number(p.porcentajes[idx]).toString() : "0"}%
                     </div>
                     <div>${Number(nivel).toLocaleString("es-CO")}</div>
@@ -415,6 +441,7 @@ function ActualizacionPrecios() {
                 precioLista: Number(lista),
                 porcentajes,
                 nivelesPrevios,
+                precios,
                 _normCodigo: codigo.toLowerCase(),
                 _normProducto: productoTxt.toLowerCase(),
             };
@@ -563,7 +590,7 @@ function ActualizacionPrecios() {
             if (!p) continue; // por si el catálogo cambió
 
             const nuevoPrecioLista = inc === 0 ? Number(p.precioLista) : redondearCentena(p.precioLista * (1 + inc / 100));
-            const niveles = calcularNiveles(nuevoPrecioLista, p.porcentajes, p.nivelesPrevios, iva);
+            const niveles = calcularNiveles(nuevoPrecioLista, p.porcentajes, p.nivelesPrevios, iva, p.precios, inc);
 
             out.push({ codigo, precioActual: Number(p.precioLista), incrementoPct: inc, nuevoPrecioLista, niveles });
         }

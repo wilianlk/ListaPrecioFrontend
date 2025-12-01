@@ -661,7 +661,33 @@ export default function ListarCambios() {
                             }}>
                             Limpiar filtros
                         </button>
-                        {/* Botón Refrescar removido a solicitud */}
+
+                        <button
+                            className={BTN_ACCENT}
+                            onClick={async () => {
+                                try {
+                                    const url = `${apiBaseURL}/api/ListasPrecios/exportar-excel`;
+                                    const res = await fetch(url);
+                                    if (!res.ok) throw new Error("Error al generar el archivo Excel.");
+
+                                    const blob = await res.blob();
+                                    const urlBlob = window.URL.createObjectURL(blob);
+                                    const a = document.createElement("a");
+                                    a.href = urlBlob;
+                                    a.download = `ListaPrecios_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.xlsx`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    window.URL.revokeObjectURL(urlBlob);
+
+                                    pushToast("✅ Archivo Excel descargado correctamente.", "success");
+                                } catch (e) {
+                                    pushToast(`❌ ${e.message || "Error descargando Excel"}`, "error");
+                                }
+                            }}>
+                            Descargar Excel
+                        </button>
+
                     </div>
                 </div>
 
